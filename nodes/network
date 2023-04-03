@@ -1,0 +1,133 @@
+#!/usr/bin/env python
+
+import rospy
+import numpy as np
+import random
+import time
+from std_msgs.msg import Float32MultiArray
+import tensorflow as tf
+from agents import Agent
+from environment import Behaviour
+from collaboration import Collaboration
+from reinforcenment import ReinforcementNetwork
+from pathfinding import pathfinding
+import os
+import sys
+import time
+if __name__ == '__main__':
+    gpus = tf.config.experimental.list_physical_devices('GPU')
+    if gpus:
+        try:
+            # Restrict TensorFlow to only use the fourth GPU
+            tf.config.experimental.set_visible_devices(gpus[0], 'GPU')
+            # Currently, memory growth needs to be the same across GPUs
+            for gpu in gpus:
+                tf.config.experimental.set_memory_growth(gpu, True)
+            logical_gpus = tf.config.experimental.list_logical_devices('GPU')
+            print(len(gpus), "Physical GPUs,", len(logical_gpus), "Logical GPUs")
+        except RuntimeError as e:
+            # Memory growth must be set before GPUs have been initialized
+            print(e)
+
+    rospy.init_node('network')
+    number_agents      = 1
+    state_size         = 28
+    action_size        = 6
+    episodes           = 19000
+    episode_step       = 60000
+    ep                 = 0
+    global_step        = 0
+    number_episode     = 0
+
+    # Calculate distances, angles, rewards, reset gazebo
+    # env     = [Behaviour() for i in range(number_agents)]
+    # multi   =  AsyncZip(1)
+
+    agents  = [Agent("agent"+str(i),action_size,state_size,number_episode) for i in range(number_agents)]
+    # agents  = [Agent(env[i],"agent"+str(i),action_size,state_size,number_episode) for i in range(number_agents)]
+    # colla   = Collaboration(agents)
+    # os.system("roslaunch collaborative_agents turtlebot3_multi.launch &")
+    [robot.call_sub("agent"+str(i),action_size,state_size,number_episode) for robot in agents]
+    # print("here")
+
+    start_time =[time.time() for robot in agents]
+    [robot.learning.get_Pa() for robot in agents]
+
+    while not rospy.is_shutdown():
+        for epi in range(episodes):
+            share_knowledge     = True
+            epi                += 1
+            # done                = False
+            finish              = False
+            [robot.reset() for robot in agents]
+            robot.environment.reset_gazebo()
+            time.sleep(0.5)
+            [robot.environment.reset(agents[i].robot_1_position_x, agents[i].robot_1_position_y) for i in range(number_agents)]
+            state               = [np.array(robot.state) for robot in agents]
+            # state               = np.array(state)
+
+            for step in range(episode_step):
+                for robot in agents:
+                    """ Your main process which runs in thread for each chunk"""
+                    # print("name robot ",str(robot.agent_name),str(time.localtime(time.time())))
+                    robot.step = step
+                    robot.get_action()
+                    if robot.evolve_rule or robot.process =="collision":
+                        robot.evolve()
+                        robot.perform_action()
+                        robot.next_values()
+                    else:
+                        robot.perform_action()
+                        robot.next_values()
+
+                    robot.append_memory()
+                    robot.work_out_reward()
+                    robot.keep_or_reset()
+                    robot.start_training()
+                # multi.run(agents)
+
+                # for robot in agents:
+                #     robot.step = step
+                #     robot.get_action()
+                #
+                #     if robot.evolve_rule or robot.process =="collision":
+                #         robot.evolve()
+                #         robot.perform_action()
+                #         robot.next_values()
+                #
+                #     else:
+                #         robot.perform_action()
+                #         robot.next_values()
+                #
+                #     robot.append_memory()
+                #
+                #     robot.work_out_reward()
+                #
+                #     # robot.keep_or_reset()
+                #     robot.start_training()
+                    # robot.update_variables()
+                    # robot.save_model(epi)
+                    # if step >= 500:
+                    #     rospy.loginfo("Time out!!")
+                    #     finish=True
+                    #     done = True
+                    #     epi+=1
+                    # robot.Done(done,finish)
+                    # robot.time_to_update()
+
+
+
+                # colla.get_heading_r2_r1
+                # colla.get_dt_r2_r1
+                # state = [robot.state for robot in agents]
+                # for robot in agents:
+                #     robot.reward =random.choice([20,30,50,70,10,40])
+                #
+                # agents[0].perform_action(0.35,0.0)
+                # agents[1].perform_action(0.25,0.1)
+                # agents[2].perform_action(-0.15,0.1)
+
+                #
+                # if (colla.change_leader) & (share_knowledge):
+                #     colla.detect_agent
+                #     share_knowledge=False

@@ -1,0 +1,3 @@
+<launch>
+  <node pkg="multi_robot" type="network" name="network" output="screen" />
+</launch>
